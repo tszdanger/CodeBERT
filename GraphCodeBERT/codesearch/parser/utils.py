@@ -60,6 +60,8 @@ def remove_comments_and_docstrings(source,lang):
                 temp.append(x)
         return '\n'.join(temp)
 
+
+# 传入rootnode，把tree转化为code的tokens的 start/end point
 def tree_to_token_index(root_node):
     if (len(root_node.children)==0 or root_node.type=='string') and root_node.type!='comment':
         return [(root_node.start_point,root_node.end_point)]
@@ -68,7 +70,8 @@ def tree_to_token_index(root_node):
         for child in root_node.children:
             code_tokens+=tree_to_token_index(child)
         return code_tokens
-    
+
+# 传入rootnode，把tree转化为variable的 start/end point
 def tree_to_variable_index(root_node,index_to_code):
     if (len(root_node.children)==0 or root_node.type=='string') and root_node.type!='comment':
         index=(root_node.start_point,root_node.end_point)
