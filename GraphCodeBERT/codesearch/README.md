@@ -39,7 +39,7 @@ cd ..
 
 - pip install torch
 - pip install transformers
-- pip install tree_sitter
+- pip install tree_sitter==0.2.1
 
 ## Fine-Tune
 
@@ -62,8 +62,8 @@ python run.py \
     --code_length 256 \
     --data_flow_length 64 \
     --nl_length 128 \
-    --train_batch_size 32 \
-    --eval_batch_size 64 \
+    --train_batch_size 16 \
+    --eval_batch_size 16 \
     --learning_rate 2e-5 \
     --seed 123456 2>&1| tee saved_models/$lang/train.log
 ```
