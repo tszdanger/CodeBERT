@@ -171,7 +171,7 @@ def convert_examples_to_features(item):
     return InputFeatures(code_tokens,code_ids,position_idx,dfg_to_code,dfg_to_dfg,nl_tokens,nl_ids,js['url'])
 
 class TextDataset(Dataset):
-    def __init__(self, tokenizer, args, file_path=None,pool=None):
+    def __init__(self, tokenizer, args, file_path=None):
         self.args=args
         prefix=file_path.split('/')[-1][:-6]
         cache_file=args.output_dir+'/'+prefix+'.pkl'
@@ -185,7 +185,9 @@ class TextDataset(Dataset):
                     line=line.strip()
                     js=json.loads(line)
                     data.append((js,tokenizer,args))
-            self.examples=pool.map(convert_examples_to_features, tqdm(data,total=len(data)))
+            # self.examples=pool.map(convert_examples_to_features, tqdm(data,total=len(data)))
+            for item in data:
+                self.examples = convert_examples_to_features(data)
             pickle.dump(self.examples,open(cache_file,'wb'))
             
         if 'train' in file_path:
@@ -242,10 +244,10 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
 
 
-def train(args, model, tokenizer,pool):
+def train(args, model, tokenizer):
     """ Train the model """
     #get training dataset
-    train_dataset=TextDataset(tokenizer, args, args.train_data_file, pool)
+    train_dataset=TextDataset(tokenizer, args, args.train_data_file)
     train_sampler = RandomSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size,num_workers=4)
     
@@ -302,7 +304,7 @@ def train(args, model, tokenizer,pool):
             scheduler.step() 
             
         #evaluate    
-        results = evaluate(args, model, tokenizer,args.eval_data_file, pool, eval_when_training=True)
+        results = evaluate(args, model, tokenizer,args.eval_data_file, eval_when_training=True)
         for key, value in results.items():
             logger.info("  %s = %s", key, round(value,4))    
             
@@ -323,12 +325,12 @@ def train(args, model, tokenizer,pool):
             logger.info("Saving model checkpoint to %s", output_dir)
 
 
-def evaluate(args, model, tokenizer,file_name,pool, eval_when_training=False):
-    query_dataset = TextDataset(tokenizer, args, file_name, pool)
+def evaluate(args, model, tokenizer,file_name, eval_when_training=False):
+    query_dataset = TextDataset(tokenizer, args, file_name)
     query_sampler = SequentialSampler(query_dataset)
     query_dataloader = DataLoader(query_dataset, sampler=query_sampler, batch_size=args.eval_batch_size,num_workers=4)
     
-    code_dataset = TextDataset(tokenizer, args, args.codebase_file, pool)
+    code_dataset = TextDataset(tokenizer, args, args.codebase_file)
     code_sampler = SequentialSampler(code_dataset)
     code_dataloader = DataLoader(code_dataset, sampler=code_sampler, batch_size=args.eval_batch_size,num_workers=4)    
 
@@ -451,7 +453,7 @@ def main():
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
     
-    pool = multiprocessing.Pool(cpu_cont)
+    # pool = multiprocessing.Pool(cpu_cont)
     
     #print arguments
     args = parser.parse_args()
@@ -478,7 +480,7 @@ def main():
     
     # Training
     if args.do_train:
-        train(args, model, tokenizer, pool)
+        train(args, model, tokenizer)
 
     # Evaluation
     results = {}
@@ -487,7 +489,7 @@ def main():
         output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
         model.load_state_dict(torch.load(output_dir),strict=False)      
         model.to(args.device)
-        result=evaluate(args, model, tokenizer,args.eval_data_file, pool)
+        result=evaluate(args, model, tokenizer,args.eval_data_file)
         logger.info("***** Eval results *****")
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(round(result[key],4)))
@@ -497,7 +499,7 @@ def main():
         output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
         model.load_state_dict(torch.load(output_dir),strict=False)      
         model.to(args.device)
-        result=evaluate(args, model, tokenizer,args.test_data_file, pool)
+        result=evaluate(args, model, tokenizer,args.test_data_file)
         logger.info("***** Eval results *****")
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(round(result[key],4)))
