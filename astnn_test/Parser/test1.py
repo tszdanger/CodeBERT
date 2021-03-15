@@ -110,23 +110,30 @@ def DFG_python(root_node, index_to_code, states):
     do_first_statement = ['for_in_clause']
     def_statement = ['default_parameter']
     states = states.copy()
+    # 如果 是叶子节点或者是string
     if (len(root_node.children) == 0 or root_node.type == 'string') and root_node.type != 'comment':
         idx, code = index_to_code[(root_node.start_point, root_node.end_point)]
         if root_node.type == code:
+            # ? type 和 node的字符串
             return [], states
         elif code in states:
+            # 这个变量已经出现在states里面
             return [(code, idx, 'comesFrom', [code], states[code].copy())], states
         else:
+            # 没出现过，并且node是identifier，向states中添加
             if root_node.type == 'identifier':
                 states[code] = [idx]
             return [(code, idx, 'comesFrom', [], [])], states
+    # 如果 是def节点，拿到name value
     elif root_node.type in def_statement:
         name = root_node.child_by_field_name('name')
         value = root_node.child_by_field_name('value')
         DFG = []
         if value is None:
+            # indexs 是name node的所有child的 index (start,end)
             indexs = tree_to_variable_index(name, index_to_code)
             for index in indexs:
+                # 全部添加进DFG和States
                 idx, code = index_to_code[index]
                 DFG.append((code, idx, 'comesFrom', [], []))
                 states[code] = [idx]
@@ -136,6 +143,7 @@ def DFG_python(root_node, index_to_code, states):
             value_indexs = tree_to_variable_index(value, index_to_code)
             temp, states = DFG_python(value, index_to_code, states)
             DFG += temp
+            # name_index中的都来自value_index,同时更新states
             for index1 in name_indexs:
                 idx1, code1 = index_to_code[index1]
                 for index2 in value_indexs:
@@ -143,6 +151,7 @@ def DFG_python(root_node, index_to_code, states):
                     DFG.append((code1, idx1, 'comesFrom', [code2], [idx2]))
                 states[code1] = [idx1]
             return sorted(DFG, key=lambda x: x[1]), states
+    # 如果是assignment语句
     elif root_node.type in assignment:
         if root_node.type == 'for_in_clause':
             right_nodes = [root_node.children[-1]]
@@ -160,6 +169,7 @@ def DFG_python(root_node, index_to_code, states):
             if len(right_nodes) == 0:
                 right_nodes = [root_node.child_by_field_name('right')]
         DFG = []
+        # 对right的nodes都做DFG
         for node in right_nodes:
             temp, states = DFG_python(node, index_to_code, states)
             DFG += temp
