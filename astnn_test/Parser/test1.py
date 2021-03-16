@@ -3,18 +3,29 @@ import pandas as pd
 import os
 import time
 
+# global failnum
+# failnum = 0
+#
+# # to count the fail percentage
+# def fail(node):
+#     global failnum
+#     if node.has_error():
+#         failnum += 1
+
+
+
 
 #remove comments, tokenize code and extract dataflow
-def extract_dataflow(code, parser=None,lang=None):
+def extract_dataflow(code, parser=None,lang=None,num_fail=0):
     #obtain dataflow
     if lang == 'cpp':
         CPP_LANGUAGE = Language('./my-languages.so', 'cpp')
         parser = Parser()
         parser.set_language(CPP_LANGUAGE)
     elif lang == 'c_sharp':
-        CPP_LANGUAGE = Language('./my-languages.so', 'c_sharp')
+        C_SHARP_LANGUAGE = Language('./my-languages.so', 'c_sharp')
         parser = Parser()
-        parser.set_language(CPP_LANGUAGE)
+        parser.set_language(C_SHARP_LANGUAGE)
     else:
         PY_LANGUAGE = Language('./my-languages.so', 'python')
         parser = Parser()
@@ -24,6 +35,12 @@ def extract_dataflow(code, parser=None,lang=None):
         tree = parser.parse(bytes(code,'utf8'))
         root_node = tree.root_node
         print(root_node.sexp())
+
+        if root_node.has_error:
+            num_fail +=1
+            print('fail! case')
+            print('code is:')
+            print(code)
         tokens_index=tree_to_token_index(root_node)
         code=code.split('\n')
         code_tokens=[index_to_code_token(x,code) for x in tokens_index]
@@ -31,7 +48,7 @@ def extract_dataflow(code, parser=None,lang=None):
         for idx,(index,code) in enumerate(zip(tokens_index,code_tokens)):
             index_to_code[index]=(idx,code)
         try:
-            DFG,_=DFG_csharp(root_node,index_to_code,{})
+            DFG,_=DFG_cpp(root_node,index_to_code,{})
         except:
             DFG=[]
         DFG=sorted(DFG,key=lambda x:x[1])
@@ -48,7 +65,11 @@ def extract_dataflow(code, parser=None,lang=None):
         dfg=new_DFG
     except:
         dfg=[]
-    return code_tokens,dfg
+        num_fail += 1
+        print('fail! case')
+        print('code is:')
+        print(code)
+    return code_tokens,dfg,num_fail
 
 def parse_source( output_file, option):
     path =  output_file
@@ -609,7 +630,7 @@ def DFG_csharp(root_node, index_to_code, states):
 def DFG_cpp(root_node, index_to_code, states):
     assignment = ['assignment_expression']
     def_statement = ['variable_declarator']
-    increment_statement = ['postfix_unary_expression']
+    increment_statement = ['update_expression']
     if_statement = ['if_statement', 'else']
     for_statement = ['for_statement']
     enhanced_for_statement = ['for_each_statement']
@@ -644,7 +665,7 @@ def DFG_cpp(root_node, index_to_code, states):
         else:
             name_indexs = tree_to_variable_index(name, index_to_code)
             value_indexs = tree_to_variable_index(value, index_to_code)
-            temp, states = DFG_csharp(value, index_to_code, states)
+            temp, states = DFG_cpp(value, index_to_code, states)
             DFG += temp
             for index1 in name_indexs:
                 idx1, code1 = index_to_code[index1]
@@ -657,7 +678,7 @@ def DFG_cpp(root_node, index_to_code, states):
         left_nodes = root_node.child_by_field_name('left')
         right_nodes = root_node.child_by_field_name('right')
         DFG = []
-        temp, states = DFG_csharp(right_nodes, index_to_code, states)
+        temp, states = DFG_cpp(right_nodes, index_to_code, states)
         DFG += temp
         name_indexs = tree_to_variable_index(left_nodes, index_to_code)
         value_indexs = tree_to_variable_index(right_nodes, index_to_code)
@@ -690,11 +711,11 @@ def DFG_cpp(root_node, index_to_code, states):
             if 'else' in child.type:
                 tag = True
             if child.type not in if_statement and flag is False:
-                temp, current_states = DFG_csharp(child, index_to_code, current_states)
+                temp, current_states = DFG_cpp(child, index_to_code, current_states)
                 DFG += temp
             else:
                 flag = True
-                temp, new_states = DFG_csharp(child, index_to_code, states)
+                temp, new_states = DFG_cpp(child, index_to_code, states)
                 DFG += temp
                 others_states.append(new_states)
         others_states.append(current_states)
@@ -713,12 +734,12 @@ def DFG_cpp(root_node, index_to_code, states):
     elif root_node.type in for_statement:
         DFG = []
         for child in root_node.children:
-            temp, states = DFG_csharp(child, index_to_code, states)
+            temp, states = DFG_cpp(child, index_to_code, states)
             DFG += temp
         flag = False
         for child in root_node.children:
             if flag:
-                temp, states = DFG_csharp(child, index_to_code, states)
+                temp, states = DFG_cpp(child, index_to_code, states)
                 DFG += temp
             elif child.type == "local_variable_declaration":
                 flag = True
@@ -737,7 +758,7 @@ def DFG_cpp(root_node, index_to_code, states):
         body = root_node.child_by_field_name('body')
         DFG = []
         for i in range(2):
-            temp, states = DFG_csharp(value, index_to_code, states)
+            temp, states = DFG_cpp(value, index_to_code, states)
             DFG += temp
             name_indexs = tree_to_variable_index(name, index_to_code)
             value_indexs = tree_to_variable_index(value, index_to_code)
@@ -747,7 +768,7 @@ def DFG_cpp(root_node, index_to_code, states):
                     idx2, code2 = index_to_code[index2]
                     DFG.append((code1, idx1, 'computedFrom', [code2], [idx2]))
                 states[code1] = [idx1]
-            temp, states = DFG_csharp(body, index_to_code, states)
+            temp, states = DFG_cpp(body, index_to_code, states)
             DFG += temp
         dic = {}
         for x in DFG:
@@ -762,7 +783,7 @@ def DFG_cpp(root_node, index_to_code, states):
         DFG = []
         for i in range(2):
             for child in root_node.children:
-                temp, states = DFG_csharp(child, index_to_code, states)
+                temp, states = DFG_cpp(child, index_to_code, states)
                 DFG += temp
         dic = {}
         for x in DFG:
@@ -777,11 +798,11 @@ def DFG_cpp(root_node, index_to_code, states):
         DFG = []
         for child in root_node.children:
             if child.type in do_first_statement:
-                temp, states = DFG_csharp(child, index_to_code, states)
+                temp, states = DFG_cpp(child, index_to_code, states)
                 DFG += temp
         for child in root_node.children:
             if child.type not in do_first_statement:
-                temp, states = DFG_csharp(child, index_to_code, states)
+                temp, states = DFG_cpp(child, index_to_code, states)
                 DFG += temp
 
         return sorted(DFG, key=lambda x: x[1]), states
@@ -823,34 +844,48 @@ def test():
 def main():
     # build_lib()
 
-    print(os.path.curdir)
-    a = pd.read_pickle('../data/programs.pkl')
-    sourcestring = a[1][0]
-    # print(sourcestring)
-    sourcestring = """
-    namespace A
-    {
-       class Test
-       {
-          static int Main(string[] args)
-          {
-            int a;
-            int b;
-            a = 3;
-            b = a;
-            return b; 
-          }
-       }
-    }
-    """
-    extract_dataflow(sourcestring,lang='c_sharp')
+    txai_test = pd.read_pickle('../data/testsets.pkl')
+    txai_test_source =  pd.read_pickle('../data/testsets_source.pkl')
 
+    astnn = pd.read_pickle('../data/programs.pkl')
+    sourcestring = astnn[1][0]
+    # print(sourcestring)
+
+    sourcestring = """
+int main()
+{
+	int a,b,c;
+	a = 3;
+	b = a++;
+	return b;
+}
+    """
+    extract_dataflow(sourcestring,lang='cpp')
+
+#---------------------ASTNN--------------------数据正确率分析
     # time_start = time.time()
-    # for i in range(len(a[1])):
+    # for i in range(len(astnn[1])):
     #     print(i)
-    #     extract_dataflow(a[1][i])
+    #     extract_dataflow(astnn[1][i],lang='cpp')
     # time_end = time.time()
     # print('time is ',time_end-time_start)
+# ---------------------ASTNN--------------------数据正确率分析
+
+# -------------------test data 测试-------------------
+#     time_start = time.time()
+#     num_fail = 0
+#     length = len(txai_test)
+#     for i in range(length):
+#         print(i)
+#         code_tokens,dfg,num_fail = extract_dataflow(txai_test.iloc[i]['binary'],lang='cpp',num_fail=num_fail)
+#         # extract_dataflow(txai_test_source.iloc[i]['source'],lang='cpp')
+#     time_end = time.time()
+#     print('number of fail cases is:', num_fail)
+#     print('fail percentage is ',num_fail/length)
+#     print('time is ',time_end-time_start)
+
+# -------------------test data 测试-------------------
+
 
 def build_lib():
 
