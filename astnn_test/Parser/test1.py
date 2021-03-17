@@ -627,9 +627,10 @@ def DFG_csharp(root_node, index_to_code, states):
 
         return sorted(DFG, key=lambda x: x[1]), states
 
+# def中的可变参数模板还没有实现支持
 def DFG_cpp(root_node, index_to_code, states):
     assignment = ['assignment_expression']
-    def_statement = ['variable_declarator']
+    def_statement = ['parameter_declaration','optional_parameter_declaration','variadic_parameter_declaration']
     increment_statement = ['update_expression']
     if_statement = ['if_statement', 'else']
     for_statement = ['for_statement']
@@ -648,12 +649,12 @@ def DFG_cpp(root_node, index_to_code, states):
                 states[code] = [idx]
             return [(code, idx, 'comesFrom', [], [])], states
     elif root_node.type in def_statement:
-        if len(root_node.children) == 2:
-            name = root_node.children[0]
-            value = root_node.children[1]
-        else:
-            name = root_node.children[0]
+        if root_node.type == 'parameter_declaration':
+            name = root_node.child_by_field_name('declarator')
             value = None
+        elif root_node.type == 'optional_parameter_declaration':
+            name = root_node.child_by_field_name('declarator')
+            value = root_node.child_by_field_name('default_value')
         DFG = []
         if value is None:
             indexs = tree_to_variable_index(name, index_to_code)
@@ -722,12 +723,14 @@ def DFG_cpp(root_node, index_to_code, states):
         if tag is False:
             others_states.append(states)
         new_states = {}
+        # 合并所有
         for dic in others_states:
             for key in dic:
                 if key not in new_states:
                     new_states[key] = dic[key].copy()
                 else:
                     new_states[key] += dic[key]
+        # new_states去重并排序
         for key in new_states:
             new_states[key] = sorted(list(set(new_states[key])))
         return sorted(DFG, key=lambda x: x[1]), new_states
@@ -741,15 +744,16 @@ def DFG_cpp(root_node, index_to_code, states):
             if flag:
                 temp, states = DFG_cpp(child, index_to_code, states)
                 DFG += temp
-            elif child.type == "local_variable_declaration":
-                flag = True
+            # elif child.type == "local_variable_declaration":
+            #     flag = True
         dic = {}
         for x in DFG:
             if (x[0], x[1], x[2]) not in dic:
                 dic[(x[0], x[1], x[2])] = [x[3], x[4]]
             else:
                 dic[(x[0], x[1], x[2])][0] = list(set(dic[(x[0], x[1], x[2])][0] + x[3]))
-                dic[(x[0], x[1], x[2])][1] = sorted(list(set(dic[(x[0], x[1], x[2])][1] + x[4])))
+                # dic[(x[0], x[1], x[2])][1] = sorted(list(set(dic[(x[0], x[1], x[2])][1] + x[4])))
+                dic[(x[0], x[1], x[2])][1] = (list(set(dic[(x[0], x[1], x[2])][1] + x[4])))
         DFG = [(x[0], x[1], x[2], y[0], y[1]) for x, y in sorted(dic.items(), key=lambda t: t[0][1])]
         return sorted(DFG, key=lambda x: x[1]), states
     elif root_node.type in enhanced_for_statement:
@@ -852,13 +856,14 @@ def main():
     # print(sourcestring)
 
     sourcestring = """
-int main()
-{
-	int a,b,c;
-	a = 3;
-	b = a++;
-	return b;
-}
+    int main(int a, int b)
+    {
+        for(int n = 0; n < 50; ++n){
+            b = 1;
+            a = a+n;
+        }
+        return b;
+    }
     """
     extract_dataflow(sourcestring,lang='cpp')
 
